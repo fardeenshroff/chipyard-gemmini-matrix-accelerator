@@ -1,4 +1,6 @@
 matmul_reference
 *.o
 __pycache__/
-.DS_Store
+.pytest_cache/
+*.pyc
+results/*.json

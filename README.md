@@ -1,66 +1,43 @@
-# Chipyard + Gemmini | RISC-V Matrix Acceleration Research
+# Chipyard + Gemmini — Matrix Accelerator Research
 
-**Research and development portfolio — Fardeen Shroff**  
-**Focus:** computer architecture · RISC-V · systolic arrays · memory systems · workload characterization
+**RISC-V · systolic arrays · integer matrix multiplication · simulation · hardware/software co-design**
 
-## Project overview
+I am investigating how matrix computation maps to a systolic array and how tiling, data movement, and system integration influence performance. I previously explored the Chipyard/Gemmini ecosystem and its matrix workloads. I have now created a reproducible **host-side wavefront simulator** and prepared a **Gemmini-linked RISC-V workload** for integration into an appropriately configured upstream simulator.
 
-I am interested in how accelerator architecture, data movement, and software execution interact to determine the performance of matrix-heavy workloads. My earlier Chipyard/Gemmini work explored RISC-V simulation, matrix-multiplication execution, and cycle-level analysis. This repository provides an independently reproducible foundation for rebuilding and extending that investigation.
+> **Source and results boundary:** This is a new, independent reconstruction. The Python wavefront model is a functional educational implementation, **not Chipyard RTL or a cycle-accurate Gemmini simulator**. My historical reported 2,334 and 10,711 cycles have not been reproduced here. The bare-metal Gemmini C program has not been compiled or executed against a pinned upstream configuration in this environment.
 
-**What is available today:** a portable FP32 matrix-multiplication reference, a deterministic test harness, a clear experimental protocol, and a checklist for restoring the original Gemmini/Chipyard implementation. **What is not available yet:** the original Gemmini-linked workload, full accelerator configuration, and historical simulator logs. The present C executable runs on the host CPU; it does not issue Gemmini commands.
+## Implementation
 
-## Architecture and research context
+| Path | Responsibility | Status |
+|---|---|---|
+| `src/matmul_reference.c` | Deterministic C11 FP32 CPU matrix multiplication | Locally tested |
+| `gemmini_lab/simulator.py` | Output-stationary PE wavefront and tiled integer GEMM | Verified against NumPy |
+| `gemmini_lab/experiment.py` | Generate deterministic matrix workload, compare results and write JSON | Locally tested |
+| `baremetal/gemmini_matmul.c` | RISC-V Gemmini library example using `tiled_matmul_auto` | Integration target; requires upstream build |
+| `scripts/parse_sim_log.py` | Parse explicit simulator output markers with SHA-256 provenance | Locally tested |
+| `tests/` | Numerical correctness, input validation, deterministic checks | Automated |
+| `docs/` | Architecture, hardware integration and measurement standards | Documented |
 
-[Chipyard](https://github.com/ucb-bar/chipyard) is a RISC-V SoC design and simulation environment. [Gemmini](https://github.com/ucb-bar/gemmini) is an open-source generator for DNN accelerators with systolic-array architectures. I use the two projects as a research context for evaluating the relationship among instruction-level workloads, accelerator mappings, memory hierarchy, and cycle counts. I will preserve upstream authorship and identify my own contributions separately when recovering the original project.
+## Run the functional research model
 
-A meaningful accelerator comparison needs more than a raw cycle count. The CPU and accelerator paths must perform the same operation, use clearly defined datatypes, validate their outputs, and record what is included in measurement: computation, transfers, setup, and simulator overhead. My emphasis is on **measured, attributable performance**, not unsupported speedup claims.
-
-## Repository contents
-
-| Path | Purpose |
-|---|---|
-| [`src/matmul_reference.c`](src/matmul_reference.c) | Newly developed C11 FP32 dense GEMM CPU baseline; deterministic matrices and checksum |
-| [`tests/test_reference.py`](tests/test_reference.py) | Output, parameter validation, and checksum repeatability tests |
-| [`Makefile`](Makefile) | Build and smoke-test entry point |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Chipyard/Gemmini execution concepts and comparison boundaries |
-| [`docs/EXPERIMENT_METHOD.md`](docs/EXPERIMENT_METHOD.md) | Fairness criteria, metrics, and simulator protocol |
-| [`EVIDENCE_CHECKLIST.md`](EVIDENCE_CHECKLIST.md) | Original files and run logs needed for restoration |
-| [`results/README.md`](results/README.md) | Evidence policy and result-recording format |
-
-## Run the portable reference
-
-Requires a C11 compiler, GNU Make, and Python 3 for the expanded tests.
+Install Python, NumPy, pytest, C compiler and GNU Make:
 
 ```bash
-make
-./matmul_reference 64
-./matmul_reference 128
+python -m pip install -r requirements.txt
 make test
+python -m gemmini_lab.experiment --m 16 --n 16 --k 16 --rows 8 --cols 8 --k-tile 8
 ```
 
-This verifies a deterministic CPU-side matrix multiplication. It **does not benchmark the Gemmini accelerator** and should not be used to infer its throughput, speedup, or energy efficiency.
+The JSON report records **multiply-accumulate counts** and **logical wavefront steps** for sequentially evaluated tiles. These are not Gemmini hardware cycles, ISA timing, throughput, or memory-transfer measurements.
 
-## Research record and validation status
+## Run on an actual Gemmini configuration
 
-| Experiment or claim | Status | Interpretation |
-|---|---|---|
-| New portable FP32 GEMM reference | Source included | Local tests / GitHub Actions validate the reference |
-| Previously described 64³ and 128³ workloads | Historical project description | Original workload source and simulator environment still need recovery |
-| Previously reported 2,334 and 10,711 cycles | **Not independently reproduced here** | Do not cite as verified measurements |
-| Gemmini-versus-CPU speedup | **Not measured** | Cannot be computed responsibly from unrelated platforms or units |
+The integration example requires a pinned [Chipyard](https://github.com/ucb-bar/chipyard) and [Gemmini](https://github.com/ucb-bar/gemmini) checkout, a RISC-V cross toolchain, compatible generated `gemmini_params.h`, and Spike or Verilator. Review [hardware integration](docs/HARDWARE_INTEGRATION.md) before adapting the program into the upstream `gemmini-rocc-tests` tree. The Gemmini API varies by revision, so no universal one-command hardware build can be claimed without the exact upstream configuration.
 
-## Next engineering milestones
+## Why this matters
 
-1. Restore the original Chipyard/Gemmini commits, submodules, RISC-V toolchain, simulator configuration, and my workload modifications.
-2. Rebuild the workload using its original data types, array configuration, and supported Gemmini APIs.
-3. Validate functional equivalence and collect cycle traces for multiple matrix sizes and memory configurations.
-4. Report raw measurements, software and hardware configuration, data-transfer overhead, and sensitivity to tiling and memory bandwidth.
+A valid accelerator study needs three layers of evidence: correct arithmetic, attribution of observed cycles to a known simulator/hardware configuration, and a matched CPU baseline. My current implementation establishes the first layer on the host and the integration structure for the next two layers. I will publish accelerator speedups only after the upstream target successfully executes and generates attributable logs.
 
-The objective is to turn a previously explored accelerator problem into a **transparent, reproducible computer-architecture study**. I will publish new measurements only after the corresponding commands and evidence are available.
+**Related work:** [NeuPIMs](https://github.com/fardeenshroff/NeuPIMs) · [GPU/compiler optimization](https://github.com/fardeenshroff/lenet5-gpu-autotvm-optimization).
 
-## Related research
-
-- [My NeuPIMs fork](https://github.com/fardeenshroff/NeuPIMs): heterogeneous NPU/PIM simulation and memory-system research. NeuPIMs itself originates from its upstream authors.
-- [My CUDA / TVM LeNet-5 experiments](https://github.com/fardeenshroff/lenet5-gpu-autotvm-optimization): complementary GPU execution and compiler optimization work.
-
-**Author:** [Fardeen Shroff](https://github.com/fardeenshroff). New reference implementation prepared for research reconstruction. Original upstream toolchains remain the work of their respective maintainers.
+**Researcher:** Fardeen Shroff. Chipyard/Gemmini design and research credit remains with their upstream authors.

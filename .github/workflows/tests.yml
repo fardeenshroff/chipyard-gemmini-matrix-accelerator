@@ -1,12 +1,16 @@
-name: Validate portable matrix reference
+name: Matrix computation and wavefront simulation tests
 on: [push, pull_request]
 jobs:
-  cpu-reference:
+  cpu-and-model:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install 'pytest>=8'
-      - run: make test
+      - run: python -m pip install -r requirements.txt
+      - name: Compile C reference and verify all integer-wavefront tests
+        run: make test
+      - name: Run deterministic, truthful simulator report
+        run: python -m gemmini_lab.experiment --m 8 --n 8 --k 8 --rows 4 --cols 4 --k-tile 4 --output results/wavefront_ci.json
+      - run: python -m compileall -q gemmini_lab scripts tests
